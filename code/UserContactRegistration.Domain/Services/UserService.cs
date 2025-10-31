@@ -98,7 +98,6 @@ namespace UserContactRegistration.Domain.Services
             ApiResponse<object> response = new ();
             try
             {
-
                  ValidateRequest(request);
                  await ValidateExistenceRelationships(request);
                  await _postgreRepositoryClient.RegisterUser(request);
