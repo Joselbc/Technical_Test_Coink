@@ -1,0 +1,195 @@
+CREATE DATABASE app_contacts_db
+  WITH OWNER = postgres
+       ENCODING = 'UTF8'
+       LC_COLLATE = 'en_US.UTF-8'
+       LC_CTYPE = 'en_US.UTF-8'
+       TEMPLATE = template0;
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE public.cat_countries (
+    country_id    BIGSERIAL PRIMARY KEY,
+    iso_code      VARCHAR(3) NOT NULL UNIQUE,
+    name          TEXT NOT NULL,
+    created_at    TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+CREATE TABLE public.cat_departments (
+    department_id BIGSERIAL PRIMARY KEY,
+    country_id    BIGINT NOT NULL REFERENCES public.cat_countries(country_id) ON DELETE RESTRICT,
+    code          VARCHAR(10),
+    name          TEXT NOT NULL,
+    created_at    TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    UNIQUE(country_id, name)
+);
+
+CREATE TABLE public.cat_municipalities (
+    municipality_id BIGSERIAL PRIMARY KEY,
+    department_id   BIGINT NOT NULL REFERENCES public.cat_departments(department_id) ON DELETE RESTRICT,
+    name            TEXT NOT NULL,
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    UNIQUE(department_id, name)
+);
+
+
+
+CREATE TABLE public.cat_document_types (
+    document_type_id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(10) NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+INSERT INTO public.cat_document_types (code, description) VALUES
+('CC', 'Cédula de ciudadanía'),
+('TI', 'Tarjeta de identidad'),
+('PAS', 'Pasaporte');
+
+CREATE TABLE public.users (
+    user_id BIGSERIAL PRIMARY KEY,
+    document_type_id BIGINT NOT NULL REFERENCES public.cat_document_types(document_type_id) ON DELETE RESTRICT,
+    document_number VARCHAR(50) NOT NULL UNIQUE,
+    first_name TEXT NOT NULL,
+    last_name TEXT,
+    email TEXT UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    CHECK (length(trim(first_name)) > 0)
+);
+
+
+CREATE TABLE public.addresses (
+    address_id       BIGSERIAL PRIMARY KEY,
+    user_id          BIGINT NOT NULL REFERENCES public.users(user_id) ON DELETE CASCADE,
+    country_id       BIGINT NOT NULL REFERENCES public.cat_countries(country_id) ON DELETE RESTRICT,
+    department_id    BIGINT NOT NULL REFERENCES public.cat_departments(department_id) ON DELETE RESTRICT,
+    municipality_id  BIGINT NOT NULL REFERENCES public.cat_municipalities(municipality_id) ON DELETE RESTRICT,
+    address          TEXT NOT NULL,
+    complement       TEXT,
+    postal_code      VARCHAR(20),
+    created_at       TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+CREATE TABLE public.phones (
+    phone_id    BIGSERIAL PRIMARY KEY,
+    user_id     BIGINT NOT NULL REFERENCES public.users(user_id) ON DELETE CASCADE,
+    phone_type  VARCHAR(20) DEFAULT 'mobile',
+    phone_value TEXT NOT NULL,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+CREATE INDEX idx_departments_country ON public.cat_departments(country_id);
+CREATE INDEX idx_municipalities_department ON public.cat_municipalities(department_id);
+CREATE INDEX idx_addresses_user ON public.addresses(user_id);
+CREATE INDEX idx_phones_user ON public.phones(user_id);
+
+INSERT INTO public.cat_countries (iso_code, name) VALUES
+  ('COL', 'Colombia'),
+  ('USA', 'United States');
+
+INSERT INTO public.cat_departments (country_id, code, name)
+SELECT c.country_id, 'DC', 'Cundinamarca' FROM public.cat_countries c WHERE c.iso_code = 'COL' LIMIT 1;
+
+INSERT INTO public.cat_departments (country_id, code, name)
+SELECT c.country_id, 'ANT', 'Antioquia' FROM public.cat_countries c WHERE c.iso_code = 'COL' LIMIT 1;
+
+INSERT INTO public.cat_municipalities (department_id, name)
+SELECT d.department_id, 'Bogota' FROM public.cat_departments d WHERE d.name = 'Cundinamarca' LIMIT 1;
+
+INSERT INTO public.cat_municipalities (department_id, name)
+SELECT d.department_id, 'Medellin' FROM public.cat_departments d WHERE d.name = 'Antioquia' LIMIT 1;
+
+
+CREATE OR REPLACE PROCEDURE sp_register_user(
+ 	p_document_number TEXT,
+	p_document_type_id BIGINT,
+    p_first_name TEXT,
+    p_last_name TEXT,
+    p_email TEXT,
+    p_phone_value TEXT,
+    p_phone_type TEXT,
+    p_country_id BIGINT,
+    p_department_id BIGINT,
+    p_municipality_id BIGINT,
+    p_address TEXT,
+    p_complement TEXT,
+    p_postal_code VARCHAR
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_user_id BIGINT;
+BEGIN
+    INSERT INTO users (document_type_id,document_number,first_name, last_name, email)
+    VALUES (p_document_type_id,p_document_number, p_first_name, p_last_name, p_email)
+    RETURNING user_id INTO v_user_id;
+
+    INSERT INTO phones (user_id, phone_type, phone_value)
+    VALUES (v_user_id, p_phone_type, p_phone_value);
+
+    INSERT INTO addresses (user_id, country_id, department_id, municipality_id, address, complement, postal_code)
+    VALUES (v_user_id, p_country_id, p_department_id, p_municipality_id, p_address, p_complement, p_postal_code);
+
+    RAISE NOTICE 'User registered with ID %', v_user_id;
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE sp_update_user(
+    p_user_id BIGINT,
+    p_document_number TEXT,
+    p_document_type_id BIGINT,
+    p_first_name TEXT,
+    p_last_name TEXT,
+    p_email TEXT,
+    p_phone_value TEXT,
+    p_phone_type TEXT,
+    p_country_id BIGINT,
+    p_department_id BIGINT,
+    p_municipality_id BIGINT,
+    p_address TEXT,
+    p_complement TEXT,
+    p_postal_code VARCHAR
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE users
+    SET document_number = p_document_number,
+        document_type_id = p_document_type_id,
+        first_name = p_first_name,
+        last_name = p_last_name,
+        email = p_email
+    WHERE user_id = p_user_id;
+
+    UPDATE phones
+    SET phone_type = p_phone_type,
+        phone_value = p_phone_value
+    WHERE user_id = p_user_id;
+
+    UPDATE addresses
+    SET country_id = p_country_id,
+        department_id = p_department_id,
+        municipality_id = p_municipality_id,
+        address = p_address,
+        complement = p_complement,
+        postal_code = p_postal_code
+    WHERE user_id = p_user_id;
+
+    RAISE NOTICE 'User with ID % updated successfully', p_user_id;
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE sp_delete_user(p_user_id BIGINT)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    DELETE FROM addresses WHERE user_id = p_user_id;
+    DELETE FROM phones WHERE user_id = p_user_id;
+    DELETE FROM users WHERE user_id = p_user_id;
+
+    RAISE NOTICE 'User with ID % deleted successfully', p_user_id;
+END;
+$$;
+
+
+
+

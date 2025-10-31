@@ -7,19 +7,19 @@ EXPOSE 553
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY ["code/SCF_ECS_REST.Application/SCF_ECS_REST.Application.csproj", "SCF_ECS_REST.Application/"]
-COPY ["code/SCF_ECS_REST.Domain/SCF_ECS_REST.Domain.csproj", "SCF_ECS_REST.Domain/"]
-COPY ["code/SCF_ECS_REST.Infrastructure/SCF_ECS_REST.Infrastructure.csproj", "SCF_ECS_REST.Infrastructure/"]
-RUN dotnet restore "SCF_ECS_REST.Application/SCF_ECS_REST.Application.csproj"
+COPY ["code/UserContactRegistration.Application/UserContactRegistration.Application.csproj", "UserContactRegistration.Application/"]
+COPY ["code/UserContactRegistration.Domain/UserContactRegistration.Domain.csproj", "UserContactRegistration.Domain/"]
+COPY ["code/UserContactRegistration.Infrastructure/UserContactRegistration.Infrastructure.csproj", "UserContactRegistration.Infrastructure/"]
+RUN dotnet restore "UserContactRegistration.Application/UserContactRegistration.Application.csproj"
 COPY . .
-WORKDIR "/src/code/SCF_ECS_REST.Application"
-RUN dotnet build "SCF_ECS_REST.Application.csproj" -c Release -o /app/build
+WORKDIR "/src/code/UserContactRegistration.Application"
+RUN dotnet build "UserContactRegistration.Application.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "SCF_ECS_REST.Application.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "UserContactRegistration.Application.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENV ASPNETCORE_URLS http://*:9291
-ENTRYPOINT ["dotnet", "SCF_ECS_REST.Application.dll"]
+ENTRYPOINT ["dotnet", "UserContactRegistration.Application.dll"]
