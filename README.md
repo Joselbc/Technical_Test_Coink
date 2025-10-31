@@ -64,8 +64,9 @@ The environment variables for the database connection are defined inside the fil
     "DbPassword": "12345"
   }
 }
+---
 
-Run the Application with Docker
+#### Run the Application with Docker
 1⃣ Build the Docker image
 
 docker build -t technical_test_coink .
@@ -75,7 +76,7 @@ docker build -t technical_test_coink .
 
 docker run -d -p 9291:9291 --name coink_api technical_test_coink
 
-⃣ Check if it is running
+Check if it is running
 docker ps
 
 
